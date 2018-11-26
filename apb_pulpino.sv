@@ -9,11 +9,12 @@
 // specific language governing permissions and limitations under the License.
 
 // Address offset: bit [4:2]
-`define REG_PAD_MUX      4'b0000
-`define REG_CLK_GATE     4'b0001
-`define REG_BOOT_ADR     4'b0010
-`define REG_INFO         4'b0100
-`define REG_STATUS       4'b0101
+`define REG_PAD_MUX     4'b0000
+`define REG_CLK_GATE    4'b0001
+`define REG_BOOT_ADR    4'b0010
+`define REG_FETCH_EN    4'b0011
+`define REG_INFO        4'b0100
+`define REG_STATUS      4'b0101
 
 // GPIO Map - for simplicity
 `define REG_PADCFG0     4'b1000 //BASEADDR+0x20
@@ -26,13 +27,13 @@
 `define REG_PADCFG7     4'b1111 //BASEADDR+0x3C
 
 // info reg
-`define VERSION          5'b00010 // Version number 1.0
-`define DATA_RAM         8'b00000100 //size of data ram in multiples of 8 kBye
-`define INSTR_RAM        8'b00000100 //size of instr ram in multiples of 8 kBye
-`define ROM              5'b00000 // size of ROM in kByte - floor to nearest
-`define ICACHE           1'b0 // has instruction cache
-`define DCACHE           1'b0 // has data cache
-//`define PERIPHERALS      4'b1
+`define VERSION         5'b00010 // Version number 1.0
+`define DATA_RAM        8'b00000100 //size of data ram in multiples of 8 kBye
+`define INSTR_RAM       8'b00000100 //size of instr ram in multiples of 8 kBye
+`define ROM             5'b00000 // size of ROM in kByte - floor to nearest
+`define ICACHE          1'b0 // has instruction cache
+`define DCACHE          1'b0 // has data cache
+//`define PERIPHERALS   4'b1
 module apb_pulpino
 #(
     parameter APB_ADDR_WIDTH = 12,  //APB slaves are 4KB by default
@@ -53,11 +54,13 @@ module apb_pulpino
     output logic         [31:0] [5:0] pad_cfg_o,
     output logic               [31:0] clk_gate_o,
     output logic               [31:0] pad_mux_o,
-    output logic               [31:0] boot_addr_o
+    output logic               [31:0] boot_addr_o,
+    output logic                      fetch_en_o
 );
 
     logic [31:0]  pad_mux_q, pad_mux_n;
     logic [31:0]  boot_adr_q, boot_adr_n;
+    logic         fetch_en_q, fetch_en_n;
     logic [31:0]  clk_gate_q, clk_gate_n;
 
     logic [31:0] [5:0] pad_cfg_q, pad_cfg_n;
@@ -73,6 +76,7 @@ module apb_pulpino
     assign clk_gate_o  = clk_gate_q;
     assign pad_cfg_o   = pad_cfg_q;
     assign boot_addr_o = boot_adr_q;
+    assign fetch_en_o = fetch_en_q;
 
     // register write logic
     always_comb
@@ -81,7 +85,8 @@ module apb_pulpino
         pad_cfg_n = pad_cfg_q;
         clk_gate_n = clk_gate_q;
         boot_adr_n = boot_adr_q;
-        status_n   = status_q;
+        fetch_en_n = fetch_en_q;
+        status_n = status_q;
 
         if (PSEL && PENABLE && PWRITE)
         begin
@@ -94,7 +99,10 @@ module apb_pulpino
                     clk_gate_n    = PWDATA;
 
                 `REG_BOOT_ADR:
-                    boot_adr_n     = PWDATA;
+                    boot_adr_n    = PWDATA;
+
+                `REG_FETCH_EN:
+                    fetch_en_n    = PWDATA[0]; // Note: fetch_enable is stored in first bit.
 
                 `REG_PADCFG0:
                 begin
@@ -178,6 +186,9 @@ module apb_pulpino
                 `REG_BOOT_ADR:
                     PRDATA = boot_adr_q;
 
+                `REG_FETCH_EN:
+                    PRDATA = {31'b0, fetch_en_q};
+
                 `REG_CLK_GATE:
                     PRDATA = clk_gate_q;
 
@@ -227,6 +238,7 @@ module apb_pulpino
             clk_gate_q         <= '1;
             pad_cfg_q          <= '{default: 32'b0};
             boot_adr_q         <= BOOT_ADDR;
+            fetch_en_q         <= 1'b0;
             status_q           <= '1; // should not be 0 because this means OK
             // cfg_pad_int[i][0]: PD, Pull Down
             // cfg_pad_int[i][1]: PU, Pull Up
@@ -259,11 +271,12 @@ module apb_pulpino
         end
         else
         begin
-            pad_mux_q          <=  pad_mux_n;
-            clk_gate_q         <=  clk_gate_n;
-            pad_cfg_q          <=  pad_cfg_n;
-            boot_adr_q         <=  boot_adr_n;
-            status_q           <=  status_n;
+            pad_mux_q          <= pad_mux_n;
+            clk_gate_q         <= clk_gate_n;
+            pad_cfg_q          <= pad_cfg_n;
+            boot_adr_q         <= boot_adr_n;
+            fetch_en_q         <= fetch_en_n;
+            status_q           <= status_n;
         end
     end
 
