@@ -15,6 +15,7 @@
 `define REG_FETCH_EN    4'b0011
 `define REG_INFO        4'b0100
 `define REG_STATUS      4'b0101
+`define REG_CLK_APB_MUX 4'b0110
 
 // GPIO Map - for simplicity
 `define REG_PADCFG0     4'b1000 //BASEADDR+0x20
@@ -55,12 +56,14 @@ module apb_pulpino
     output logic               [31:0] clk_gate_o,
     output logic               [31:0] pad_mux_o,
     output logic               [31:0] boot_addr_o,
-    output logic                      fetch_en_o
+    output logic                      fetch_en_o,
+    output logic                      clk_apb_mux_o
 );
 
     logic [31:0]  pad_mux_q, pad_mux_n;
     logic [31:0]  boot_adr_q, boot_adr_n;
     logic         fetch_en_q, fetch_en_n;
+    logic         clk_apb_mux_q, clk_apb_mux_n;
     logic [31:0]  clk_gate_q, clk_gate_n;
 
     logic [31:0] [5:0] pad_cfg_q, pad_cfg_n;
@@ -77,6 +80,7 @@ module apb_pulpino
     assign pad_cfg_o   = pad_cfg_q;
     assign boot_addr_o = boot_adr_q;
     assign fetch_en_o = fetch_en_q;
+    assign clk_apb_mux_o = clk_apb_mux_q;
 
     // register write logic
     always_comb
@@ -86,6 +90,7 @@ module apb_pulpino
         clk_gate_n = clk_gate_q;
         boot_adr_n = boot_adr_q;
         fetch_en_n = fetch_en_q;
+        clk_apb_mux_n = clk_apb_mux_q;
         status_n = status_q;
 
         if (PSEL && PENABLE && PWRITE)
@@ -103,6 +108,9 @@ module apb_pulpino
 
                 `REG_FETCH_EN:
                     fetch_en_n    = PWDATA[0]; // Note: fetch_enable is stored in first bit.
+                
+                `REG_CLK_APB_MUX:
+                    clk_apb_mux_n = PWDATA[0];
 
                 `REG_PADCFG0:
                 begin
@@ -191,6 +199,9 @@ module apb_pulpino
 
                 `REG_CLK_GATE:
                     PRDATA = clk_gate_q;
+                    
+                `REG_CLK_APB_MUX:
+                    PRDATA = {31'b0, clk_apb_mux_q};
 
                 `REG_PADCFG0:
                     PRDATA = {2'b00,pad_cfg_q[3],2'b00,pad_cfg_q[2],2'b00,pad_cfg_q[1],2'b00,pad_cfg_q[0]};
@@ -239,6 +250,7 @@ module apb_pulpino
             pad_cfg_q          <= '{default: 32'b0};
             boot_adr_q         <= BOOT_ADDR;
             fetch_en_q         <= 1'b0;
+            clk_apb_mux_q      <= 1'b0;
             status_q           <= '1; // should not be 0 because this means OK
             // cfg_pad_int[i][0]: PD, Pull Down
             // cfg_pad_int[i][1]: PU, Pull Up
@@ -276,6 +288,7 @@ module apb_pulpino
             pad_cfg_q          <= pad_cfg_n;
             boot_adr_q         <= boot_adr_n;
             fetch_en_q         <= fetch_en_n;
+            clk_apb_mux_q      <= clk_apb_mux_n;
             status_q           <= status_n;
         end
     end
